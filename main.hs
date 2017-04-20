@@ -2,6 +2,9 @@
 -- Robert Cummings
 -- April 2017
 
+-- Main:
+-- This module manages all the IO interaction.
+
 module Main where
 
 import Parsing
