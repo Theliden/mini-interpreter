@@ -1,4 +1,9 @@
--- Copyright 2017, Robert Cummings, All rights reserved.
+-- interp.hs
+-- Robert Cummings
+-- April 2017
+
+-- Interp:
+-- Interprets an AST to a value.
 
 module Interp(interpNum,interpVal,Env) where
 
