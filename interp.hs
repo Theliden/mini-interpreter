@@ -1,50 +1,83 @@
 -- interp.hs
 -- Robert Cummings
--- April 2017
+-- May 2017
 
 -- Interp:
 -- Interprets an AST to a value.
+-- Uses lazy evaluation with memoization.
 
-module Interp(interpNum,interpVal,Env) where
+module Interp(interpNum,interpDefine,State,emptyState) where
 
 import Parsing
 
 data Val = Numb Integer
          | Closure String Ast Env
 
-type Env = [(String, Val)]
+type Loc = Integer
+type Env = [(String, Loc)]
 
-data Cont = MT | AppL Ast Env Cont | AppR Val Cont
-          | BinL Op Ast Env Cont | BinR Op Val Cont
+data MemCell = Todo Ast Env | Found Val
+type Store = [(Loc,MemCell)]
+
+type State = (Env,Store)
+
+emptyState :: State
+emptyState = ([],[])
 
 opTrans :: Op -> Integer -> Integer -> Integer
 opTrans Plus = (+)
 opTrans Times = (*)
 
-data InterpError = NotANumber | BadDefine | Undefined | OtherInterpError deriving Show
+data InterpError = NotANumber | BadDefine | Undefined
+                 | LeftOperandNotNumber | RightOperandNotNumber
+                 | NotAFunction | OtherInterpError | BadLoc deriving Show
 
-interpNum :: Ast -> Env -> Either Integer InterpError
-interpNum x e = case interpHelp x MT e of
-                  Left (Numb y) -> Left y
-                  Left _ -> Right NotANumber
-                  Right er -> Right er
+interpNum :: Ast -> State -> Either (Integer,State) InterpError
+interpNum x (e,s) = case interp x e s of
+                    Left (Numb y,s') -> Left (y,(e,s'))
+                    Left _ -> Right NotANumber
+                    Right er -> Right er
 
-interpVal :: Ast -> Env -> Either Val InterpError
-interpVal x e = interpHelp x MT e
+interpDefine :: String -> Ast -> State -> Either State InterpError
+interpDefine x a (e,s)
+  = case interp a e s of
+      Right er -> Right er
+      Left (v,s') -> Left (addToState x v (e,s'))
 
-interpHelp :: Ast -> Cont -> Env -> Either Val InterpError
-interpHelp (Bin op x y) c e = interpHelp x (BinL op y e c) e
-interpHelp (App f x) c e = interpHelp f (AppL x e c) e
-interpHelp (Fun fp fb) c e = applyCont c (Closure fp fb e)
-interpHelp (Var x) c e = case lookup x e of Just v -> applyCont c v
-                                            Nothing -> Right Undefined
-interpHelp (Number x) c _ = applyCont c (Numb x)
-interpHelp (Define _ _) _ _ = Right BadDefine
+newloc :: Store -> Loc
+newloc = toInteger . length
 
-applyCont :: Cont -> Val -> Either Val InterpError
-applyCont (BinL op y e k) x = interpHelp y (BinR op x k) e
-applyCont (BinR op (Numb x) k) (Numb y) = applyCont k (Numb (opTrans op x y))
-applyCont (AppL a e k) f = interpHelp a (AppR f k) e
-applyCont (AppR (Closure fp fb e) k) x = interpHelp fb k ((fp,x):e)
-applyCont MT x = Left x
-applyCont _ _ = Right OtherInterpError
+addToState :: String -> Val -> State -> State
+addToState x v (e,s) = let l = newloc s in ((x,l):e,(l,Found v):s)
+
+interp :: Ast -> Env -> Store -> Either (Val,Store) InterpError
+interp (Number v) _ s = Left (Numb v,s)
+interp (Fun p b) e s = Left (Closure p b e,s)
+interp (Bin op x y) e s
+  = case interp x e s of
+      Right er -> Right er
+      Left (Numb v,s')
+        -> case interp y e s' of
+             Right er -> Right er
+             Left (Numb w,s'') -> Left (Numb (opTrans op v w),s'')
+             _ -> Right RightOperandNotNumber
+      _ -> Right LeftOperandNotNumber
+interp (App f x) e s
+  = case interp f e s of
+      Right er -> Right er
+      Left (Closure fp fb fe,s')
+        -> let l = newloc s' in
+             interp fb ((fp,l):fe) ((l,Todo x e):s')
+      _ -> Right NotAFunction
+interp (Var x) e s
+  = case lookup x e of
+      Just l
+        -> case (lookup l s) of
+             Just (Found y) -> Left (y,s)
+             Just (Todo y le)
+               -> case interp y le s of
+                    Right er -> Right er
+                    Left (z,s') -> Left (z,(l,Found z):s')
+             Nothing -> Right BadLoc
+      Nothing -> Right Undefined
+interp (Define _ _) _ _ = Right BadDefine
