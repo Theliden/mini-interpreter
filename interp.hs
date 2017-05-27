@@ -32,50 +32,50 @@ data InterpError = NotANumber | BadDefine | Undefined
                  | LeftOperandNotNumber | RightOperandNotNumber
                  | NotAFunction | OtherInterpError | BadLoc deriving Show
 
-interpNum :: Ast -> State -> Either (Integer,State) InterpError
+interpNum :: Ast -> State -> Either InterpError (Integer,State)
 interpNum x (e,s) = case interp x e s of
-                    Left (Numb y,s') -> Left (y,(e,s'))
-                    Left _ -> Right NotANumber
-                    Right er -> Right er
+                    Right (Numb y,s') -> Right (y,(e,s'))
+                    Right _ -> Left NotANumber
+                    Left er -> Left er
 
-interpDefine :: String -> Ast -> State -> Either State InterpError
+interpDefine :: String -> Ast -> State -> Either InterpError State
 interpDefine x a (e,s)
   = case interp a e s of
-      Right er -> Right er
-      Left (v,s') -> let l = newloc s'
-                         in Left ((x,l):e,(l,Found v):s')
+      Left er -> Left er
+      Right (v,s') -> let l = newloc s'
+                         in Right ((x,l):e,(l,Found v):s')
 
 newloc :: Store -> Loc
 newloc = toInteger . length
 
-interp :: Ast -> Env -> Store -> Either (Val,Store) InterpError
-interp (Number v) _ s = Left (Numb v,s)
-interp (Fun p b) e s = Left (Closure p b e,s)
+interp :: Ast -> Env -> Store -> Either InterpError (Val,Store)
+interp (Number v) _ s = Right (Numb v,s)
+interp (Fun p b) e s = Right (Closure p b e,s)
 interp (Bin op x y) e s
   = case interp x e s of
-      Right er -> Right er
-      Left (Numb v,s')
+      Left er -> Left er
+      Right (Numb v,s')
         -> case interp y e s' of
-             Right er -> Right er
-             Left (Numb w,s'') -> Left (Numb (opTrans op v w),s'')
-             _ -> Right RightOperandNotNumber
-      _ -> Right LeftOperandNotNumber
+             Left er -> Left er
+             Right (Numb w,s'') -> Right (Numb (opTrans op v w),s'')
+             _ -> Left RightOperandNotNumber
+      _ -> Left LeftOperandNotNumber
 interp (App f x) e s
   = case interp f e s of
-      Right er -> Right er
-      Left (Closure fp fb fe,s')
+      Left er -> Left er
+      Right (Closure fp fb fe,s')
         -> let l = newloc s' in
              interp fb ((fp,l):fe) ((l,Todo x e):s')
-      _ -> Right NotAFunction
+      _ -> Left NotAFunction
 interp (Var x) e s
   = case lookup x e of
       Just l
         -> case (lookup l s) of
-             Just (Found y) -> Left (y,s)
+             Just (Found y) -> Right (y,s)
              Just (Todo y le)
                -> case interp y le s of
-                    Right er -> Right er
-                    Left (z,s') -> Left (z,(l,Found z):s')
-             Nothing -> Right BadLoc
-      Nothing -> Right Undefined
-interp (Define _ _) _ _ = Right BadDefine
+                    Left er -> Left er
+                    Right (z,s') -> Right (z,(l,Found z):s')
+             Nothing -> Left BadLoc
+      Nothing -> Left Undefined
+interp (Define _ _) _ _ = Left BadDefine

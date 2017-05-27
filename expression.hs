@@ -23,31 +23,31 @@ getParenType c = case c of
 
 data Exp = ExpList ParenType [Exp] | Symbol String | Numeric Integer deriving Show
 
-toExp :: [Token] -> Either Exp ParseError
+toExp :: [Token] -> Either ParseError Exp
 toExp ((Lp prn):rest1) = case toExpList rest1 ExpEmpty of
-  Left (ptype, lst, []) -> if ptype == getParenType prn
-                              then Left (ExpList ptype lst)
-                              else Right ParenMismatch
-  Left _ -> Right BadListFormat
-  Right er -> Right er
-toExp [Id str] = Left (Symbol str)
-toExp [TokNumb x] = Left (Numeric x)
-toExp _ = Right BadListFormat
+  Right (ptype, lst, []) -> if ptype == getParenType prn
+                              then Right (ExpList ptype lst)
+                              else Left ParenMismatch
+  Right _ -> Left BadListFormat
+  Left er -> Left er
+toExp [Id str] = Right (Symbol str)
+toExp [TokNumb x] = Right (Numeric x)
+toExp _ = Left BadListFormat
 
 data ExpCont = ExpEmpty | Cons Exp ExpCont | MakeList ParenType ExpCont
 
 type Result = (ParenType,[Exp],[Token])
 
-toExpList :: [Token] -> ExpCont -> Either Result ParseError
-toExpList [] _ = Right BadListFormat
+toExpList :: [Token] -> ExpCont -> Either ParseError Result
+toExpList [] _ = Left BadListFormat
 toExpList ((Rp prn):rest) c = applyExpCont c (getParenType prn,[],rest)
 toExpList ((Id str):rest) c = toExpList rest (Cons (Symbol str) c)
 toExpList ((TokNumb x):rest) c = toExpList rest (Cons (Numeric x) c)
 toExpList ((Lp prn):rest) c = toExpList rest (MakeList (getParenType prn) c)
 
-applyExpCont :: ExpCont -> Result -> Either Result ParseError
-applyExpCont ExpEmpty x = Left x
+applyExpCont :: ExpCont -> Result -> Either ParseError Result
+applyExpCont ExpEmpty x = Right x
 applyExpCont (Cons e c) (ptype,lst,rest) = applyExpCont c (ptype,e:lst,rest)
 applyExpCont (MakeList ptype1 c) (ptype2,lst,rest)
   | ptype1==ptype2 = toExpList rest (Cons (ExpList ptype1 lst) c)
-  | True = Right ParenMismatch
+  | True = Left ParenMismatch

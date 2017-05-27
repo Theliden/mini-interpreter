@@ -10,10 +10,10 @@ module Parsing(parse,Op(..),Ast(..)) where
 import Tokenizing
 import Expression
 
-parse :: String -> Either Ast ParseError
+parse :: String -> Either ParseError Ast
 parse s = case toExp (tokenize s) of
-  Left ex -> toAst ex AstEmpty
-  Right er -> Right er
+  Right ex -> toAst ex AstEmpty
+  Left er -> Left er
 
 data Op = Plus | Times  deriving Show
 
@@ -28,9 +28,9 @@ data AstCont = AstEmpty | AppL Exp AstCont | AppR Ast AstCont
 isBinOp :: String -> Bool
 isBinOp s = elem  s ["+","*"]
 
-toAst :: Exp -> AstCont -> Either Ast ParseError
+toAst :: Exp -> AstCont -> Either ParseError Ast
 toAst (Numeric x) c = applyAstCont c (Number x)
-toAst (Symbol s) c | isBinOp s = Right OpArgs
+toAst (Symbol s) c | isBinOp s = Left OpArgs
                    | True = applyAstCont c (Var s)
 toAst (ExpList _ [Symbol "+",x,y]) c = toAst x (BinL Plus y c)
 toAst (ExpList _ [Symbol "*",x,y]) c = toAst x (BinL Times y c)
@@ -39,10 +39,10 @@ toAst (ExpList _ [Symbol "fun",ExpList _ [Symbol x],y]) c = toAst y (MakeFun x c
 toAst (ExpList _ [Symbol "with",ExpList _ [ExpList _ [Symbol x,y]],z]) c
   = toAst z (MakeFun x (AppL y c))
 toAst (ExpList _ [Symbol "define",Symbol x,y]) c = toAst y (MakeDef x c)
-toAst _ _ = Right FunArgs
+toAst _ _ = Left FunArgs
 
-applyAstCont :: AstCont -> Ast -> Either Ast ParseError
-applyAstCont AstEmpty v = Left v
+applyAstCont :: AstCont -> Ast -> Either ParseError Ast
+applyAstCont AstEmpty v = Right v
 applyAstCont (AppL e k) v = toAst e (AppR v k)
 applyAstCont (BinL op e k) v = toAst e (BinR op v k)
 applyAstCont (AppR x k) y = applyAstCont k (App x y)

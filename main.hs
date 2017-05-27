@@ -41,14 +41,14 @@ repl st = do
     then putStrLn "Goodbye!"
     else do s <- nextBalancedString
             case parse s of
-              Right er -> do print er ; repl st
-              Left (Define x ast)
+              Left er -> do print er ; repl st
+              Right (Define x ast)
                 -> case interpDefine x ast st of
-                     Right er -> do print er ; repl st
-                     Left st' -> repl st'
-              Left ast
+                     Left er -> do print er ; repl st
+                     Right st' -> repl st'
+              Right ast
                 -> case interpNum ast st of
-                     Right er -> do print er ; repl st
-                     Left (x,st') -> do print x ; repl st'
+                     Left er -> do print er ; repl st
+                     Right (x,st') -> do print x ; repl st'
 
   
