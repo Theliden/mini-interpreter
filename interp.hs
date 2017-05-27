@@ -42,13 +42,11 @@ interpDefine :: String -> Ast -> State -> Either State InterpError
 interpDefine x a (e,s)
   = case interp a e s of
       Right er -> Right er
-      Left (v,s') -> Left (addToState x v (e,s'))
+      Left (v,s') -> let l = newloc s'
+                         in Left ((x,l):e,(l,Found v):s')
 
 newloc :: Store -> Loc
 newloc = toInteger . length
-
-addToState :: String -> Val -> State -> State
-addToState x v (e,s) = let l = newloc s in ((x,l):e,(l,Found v):s)
 
 interp :: Ast -> Env -> Store -> Either (Val,Store) InterpError
 interp (Number v) _ s = Left (Numb v,s)
