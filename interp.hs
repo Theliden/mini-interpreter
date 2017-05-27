@@ -51,15 +51,11 @@ newloc = toInteger . length
 interp :: Ast -> Env -> Store -> Either InterpError (Val,Store)
 interp (Number v) _ s = Right (Numb v,s)
 interp (Fun p b) e s = Right (Closure p b e,s)
-interp (Bin op x y) e s
-  = case interp x e s of
-      Left er -> Left er
-      Right (Numb v,s')
-        -> case interp y e s' of
-             Left er -> Left er
-             Right (Numb w,s'') -> Right (Numb (opTrans op v w),s'')
-             _ -> Left RightOperandNotNumber
-      _ -> Left LeftOperandNotNumber
+interp (Bin op x y) e s = (interp x e s) >>= getl
+  where getl (Numb v,s') = (interp y e s') >>= getr v
+        getl _ = Left LeftOperandNotNumber
+        getr v (Numb w,s'') = Right (Numb (opTrans op v w),s'')
+        getr _  _ = Left RightOperandNotNumber
 interp (App f x) e s
   = case interp f e s of
       Left er -> Left er
