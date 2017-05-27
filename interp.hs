@@ -56,22 +56,13 @@ interp (Bin op x y) e s = (interp x e s) >>= getl
         getl _ = Left LeftOperandNotNumber
         getr v (Numb w,s'') = Right (Numb (opTrans op v w),s'')
         getr _  _ = Left RightOperandNotNumber
-interp (App f x) e s
-  = case interp f e s of
-      Left er -> Left er
-      Right (Closure fp fb fe,s')
-        -> let l = newloc s' in
-             interp fb ((fp,l):fe) ((l,Todo x e):s')
-      _ -> Left NotAFunction
-interp (Var x) e s
-  = case lookup x e of
-      Just l
-        -> case (lookup l s) of
-             Just (Found y) -> Right (y,s)
-             Just (Todo y le)
-               -> case interp y le s of
-                    Left er -> Left er
-                    Right (z,s') -> Right (z,(l,Found z):s')
-             Nothing -> Left BadLoc
-      Nothing -> Left Undefined
+interp (App f x) e s = (interp f e s) >>= getf
+  where getf (Closure fp fb fe,s')
+          = let l = newloc s' in interp fb ((fp,l):fe) ((l,Todo x e):s')
+        getf _ =  Left NotAFunction
+interp (Var x) e s = maybe (Left Undefined) takel (lookup x e)
+  where takel l = maybe (Left BadLoc) (takemem l) (lookup l s)
+        takemem l (Found y) = Right (y,s)
+        takemem l (Todo ast le) = (interp ast le s) >>= memoize l
+        memoize l (z,s') = Right (z,(l,Found z):s')
 interp (Define _ _) _ _ = Left BadDefine
