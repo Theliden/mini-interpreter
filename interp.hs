@@ -44,7 +44,7 @@ interpDefine x a (e,s) = (interp a e s EmptyCont) >>= addtostate
 newloc :: Store -> Loc
 newloc = toInteger . length
 
-data InterpCont = EmptyCont | BinL Op Ast Env InterpCont | BinR Op Val InterpCont
+data InterpCont = EmptyCont | BinL Op Ast Env InterpCont | BinR Op Integer InterpCont
                 | AppL Ast Env InterpCont | Memoize Loc InterpCont
 
 interp :: Ast -> Env -> Store -> InterpCont -> Either InterpError (Val,Store)
@@ -60,10 +60,9 @@ interp (Define _ _) _ _ _ = Left BadDefine
 
 applyInterpCont :: InterpCont -> Val -> Store -> Either InterpError (Val,Store)
 applyInterpCont EmptyCont x s = Right (x,s)
-applyInterpCont (BinL op y e c) x@(Numb v) s = interp y e s (BinR op x c)
+applyInterpCont (BinL op y e c) (Numb v) s = interp y e s (BinR op v c)
 applyInterpCont (BinL _ _ _ _) _ _ = Left LeftOperandNotNumber
-applyInterpCont (BinR op (Numb x) c) (Numb y) s
-  = applyInterpCont c (Numb (opTrans op x y)) s
+applyInterpCont (BinR op x c) (Numb y) s = applyInterpCont c (Numb (opTrans op x y)) s
 applyInterpCont (BinR _ _ _) _ _ = Left RightOperandNotNumber
 applyInterpCont (AppL x e c) (Closure fp fb fe) s
   = let l = newloc s in interp fb ((fp,l):fe) ((l,Todo x e):s) c
